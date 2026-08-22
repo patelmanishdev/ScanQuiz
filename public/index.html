@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScanQuiz — Turn any textbook page into a practice test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============ TOKENS ============ */
+:root{
+  --paper:#FAF7ED;
+  --paper-raised:#FFFFFF;
+  --ink:#1E1B16;
+  --ink-soft:#5B5548;
+  --rule:#3D5A99;
+  --rule-soft:#B9C6E4;
+  --pen:#C23B3B;
+  --pen-soft:#EFD3D3;
+  --gold:#D9A441;
+  --green:#3E8E5A;
+  --line:#DCD5C4;
+  --shadow: 0 1px 0 rgba(30,27,22,.04), 0 8px 24px rgba(30,27,22,.06);
+  --radius:14px;
+  --nav-h:72px;
+}
+[data-theme="dark"]{
+  --paper:#15171C;
+  --paper-raised:#1D2027;
+  --ink:#EDE7DA;
+  --ink-soft:#A9A395;
+  --rule:#7C97DA;
+  --rule-soft:#2B355C;
+  --pen:#E8706E;
+  --pen-soft:#3E2429;
+  --gold:#EFC46D;
+  --green:#4CAF75;
+  --line:#2C2F38;
+  --shadow: 0 1px 0 rgba(0,0,0,.2), 0 12px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'Inter',sans-serif;
+  transition:background .4s ease,color .4s ease;
+  min-height:100vh;
+  background-image:linear-gradient(var(--line) 1px, transparent 1px);
+  background-size: 100% 42px;
+  background-position: 0 var(--nav-h);
+}
+[data-theme="dark"] body{ background-image:none; }
+h1,h2,h3,.display{ font-family:'Fraunces',serif; }
+::selection{ background:var(--gold); color:var(--ink); }
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+}
+
+/* ============ NAVBAR — mirror / glass ============ */
+.navbar{
+  position:fixed; top:0; left:0; right:0; height:var(--nav-h);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 clamp(16px,4vw,40px);
+  z-index:100;
+  background:rgba(250,247,237,.55);
+  backdrop-filter:blur(18px) saturate(160%);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);
+  border-bottom:1px solid var(--line);
+}
+[data-theme="dark"] .navbar{ background:rgba(21,23,28,.5); }
+.navbar::after{
+  content:""; position:absolute; left:0; right:0; top:100%; height:14px;
+  background:linear-gradient(to bottom, rgba(255,255,255,.16), transparent);
+  pointer-events:none;
+}
+[data-theme="dark"] .navbar::after{ background:linear-gradient(to bottom, rgba(255,255,255,.05), transparent); }
+.brand{ display:flex; align-items:center; gap:10px; font-family:'Fraunces',serif; font-weight:700; font-size:20px; cursor:pointer; }
+.brand-mark{
+  width:34px; height:34px; border-radius:9px;
+  background:linear-gradient(145deg, var(--rule), var(--gold));
+  display:flex; align-items:center; justify-content:center;
+  color:#fff; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:14px;
+  box-shadow: var(--shadow);
+  animation: floatMark 5s ease-in-out infinite;
+}
+@keyframes floatMark{ 0%,100%{ transform:rotate(-4deg) translateY(0);} 50%{ transform:rotate(4deg) translateY(-3px);} }
+.nav-right{ display:flex; align-items:center; gap:12px; }
+.nav-links{ display:flex; gap:22px; font-size:14px; font-weight:500; color:var(--ink-soft); }
+.nav-links a{ color:inherit; text-decoration:none; cursor:pointer; }
+.nav-links a:hover{ color:var(--rule); }
+.nav-links a.active{ color:var(--rule); }
+
+.user-chip{
+  display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600;
+  background:var(--paper-raised); border:1px solid var(--line); padding:6px 12px 6px 6px; border-radius:999px; cursor:default;
+}
+.user-avatar{
+  width:26px; height:26px; border-radius:50%; background:linear-gradient(145deg, var(--gold), var(--pen));
+  color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-family:'IBM Plex Mono',monospace;
+}
+.link-btn{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:13px; font-family:inherit; text-decoration:underline; padding:0; }
+
+.theme-toggle{
+  width:52px; height:30px; border-radius:20px; border:1px solid var(--line); background:var(--paper-raised);
+  position:relative; cursor:pointer; box-shadow: inset 0 1px 3px rgba(0,0,0,.08); flex:0 0 auto;
+}
+.theme-toggle .knob{
+  position:absolute; top:2px; left:2px; width:24px; height:24px; border-radius:50%;
+  background:linear-gradient(145deg, var(--gold), var(--rule));
+  transition: transform .35s cubic-bezier(.65,-0.3,.35,1.3);
+}
+[data-theme="dark"] .theme-toggle .knob{ transform:translateX(22px); }
+
+/* ============ LAYOUT ============ */
+main{ padding-top:var(--nav-h); }
+.wrap{ max-width:960px; margin:0 auto; padding:0 clamp(16px,4vw,40px); }
+.view{ display:none; }
+.view.show{ display:block; }
+
+.hero{ padding:64px 0 32px; text-align:center; }
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace; font-size:12.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--pen); display:inline-flex; align-items:center; gap:8px; margin-bottom:18px;
+}
+.eyebrow::before{ content:""; width:8px; height:8px; border-radius:50%; background:var(--pen); }
+.hero h1{ font-size:clamp(32px,5.6vw,54px); line-height:1.05; font-weight:700; margin:0 0 16px; }
+.hero h1 em{ font-style:italic; color:var(--rule); }
+.hero p{ color:var(--ink-soft); font-size:17px; max-width:560px; margin:0 auto; line-height:1.6; }
+
+/* ============ AUTH GATE / MODAL ============ */
+.auth-gate{
+  max-width:520px; margin:40px auto 0; background:var(--paper-raised); border:1px solid var(--line);
+  border-radius:var(--radius); box-shadow:var(--shadow); padding:32px; text-align:center;
+}
+.auth-gate p{ color:var(--ink-soft); margin:6px 0 18px; }
+
+.modal-overlay{
+  display:none; position:fixed; inset:0; z-index:200; align-items:center; justify-content:center;
+  background:rgba(20,18,14,.45); backdrop-filter:blur(4px); padding:16px;
+}
+.modal-overlay.show{ display:flex; }
+.modal{
+  width:100%; max-width:400px; background:var(--paper-raised); border:1px solid var(--line);
+  border-radius:var(--radius); box-shadow:var(--shadow); padding:28px; animation: pop .35s cubic-bezier(.3,1.4,.5,1) both;
+}
+.modal-tabs{ display:flex; gap:6px; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:4px; margin-bottom:20px; }
+.modal-tab{ flex:1; text-align:center; padding:8px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; color:var(--ink-soft); }
+.modal-tab.active{ background:var(--rule); color:#fff; }
+.modal h2{ margin:0 0 4px; font-size:22px; }
+.modal .sub{ color:var(--ink-soft); font-size:13.5px; margin-bottom:18px; }
+.field{ margin-bottom:14px; }
+.field label{ display:block; font-size:12px; font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); margin-bottom:6px; }
+.field input, .field select{
+  width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line);
+  background:var(--paper); color:var(--ink); font-size:15px; font-family:inherit;
+}
+.field input:focus, .field select:focus{ outline:2px solid var(--rule); outline-offset:1px; }
+.modal-close{ position:absolute; top:14px; right:16px; background:none; border:none; font-size:18px; cursor:pointer; color:var(--ink-soft); }
+.modal{ position:relative; }
+
+/* ============ BUTTONS ============ */
+.btn{ border:none; border-radius:9px; padding:13px 22px; font-weight:600; font-size:15px; cursor:pointer; font-family:'Inter',sans-serif; transition:transform .15s, box-shadow .15s, opacity .15s; }
+.btn:active{ transform:translateY(1px); }
+.btn-primary{ background:linear-gradient(145deg, var(--rule), #2c4680); color:#fff; box-shadow:var(--shadow); width:100%; margin-top:6px; font-size:16px; padding:15px; }
+.btn-primary:disabled{ opacity:.55; cursor:not-allowed; }
+.btn-ghost{ background:transparent; border:1px solid var(--line); color:var(--ink); }
+
+/* ============ SCANNER ============ */
+.scanner{ margin:44px auto 0; max-width:640px; background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:28px; position:relative; overflow:hidden; }
+.dropzone{
+  border:2px dashed var(--rule-soft); border-radius:10px; padding:38px 20px; text-align:center; cursor:pointer; position:relative;
+  transition:border-color .25s, background .25s, transform .25s;
+  background:repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(61,90,153,.03) 10px, rgba(61,90,153,.03) 20px);
+}
+.dropzone.drag{ border-color:var(--rule); transform:scale(1.01); background:var(--rule-soft); }
+.dropzone svg{ width:42px; height:42px; margin-bottom:10px; color:var(--rule); }
+.dropzone .hint{ font-size:13px; color:var(--ink-soft); margin-top:6px; }
+.dropzone input{ display:none; }
+.preview-wrap{ position:relative; display:none; }
+.preview-wrap.show{ display:block; }
+.preview-img{ width:100%; max-height:340px; object-fit:contain; border-radius:8px; border:1px solid var(--line); display:block; }
+.scan-beam{ position:absolute; left:0; right:0; height:3px; background:linear-gradient(90deg, transparent, var(--gold), transparent); box-shadow:0 0 12px 2px var(--gold); animation: sweep 1.8s ease-in-out infinite; display:none; }
+.scan-beam.active{ display:block; }
+@keyframes sweep{ 0%{ top:0;} 50%{ top:100%;} 100%{ top:0;} }
+.remove-img{ position:absolute; top:8px; right:8px; background:var(--ink); color:var(--paper); border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; font-size:14px; opacity:.85; }
+.config-row{ display:flex; gap:14px; align-items:center; margin-top:22px; flex-wrap:wrap; }
+.config-row .field{ flex:1; min-width:150px; margin-bottom:0; }
+.error-box{ display:none; background:var(--pen-soft); border:1px solid var(--pen); color:var(--ink); padding:14px 16px; border-radius:9px; font-size:14px; margin-top:16px; }
+.error-box.show{ display:block; }
+
+/* ============ LOADING ============ */
+.loading-panel{ display:none; text-align:center; padding:50px 0; }
+.loading-panel.show{ display:block; }
+.pencil{ width:60px; height:60px; margin:0 auto 18px; animation: spin3d 1.4s linear infinite; transform-style:preserve-3d; }
+@keyframes spin3d{ from{ transform:rotateY(0deg) rotateZ(15deg);} to{ transform:rotateY(360deg) rotateZ(15deg);} }
+.loading-panel p{ font-family:'IBM Plex Mono',monospace; font-size:13.5px; color:var(--ink-soft); }
+
+/* ============ QUIZ / SCANTRON ============ */
+.quiz-panel{ display:none; padding:40px 0 80px; }
+.quiz-panel.show{ display:block; }
+.quiz-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:26px; flex-wrap:wrap; gap:10px; }
+.quiz-head h2{ margin:0; font-size:26px; }
+.progress-pill{ font-family:'IBM Plex Mono',monospace; font-size:13px; background:var(--paper-raised); border:1px solid var(--line); padding:6px 14px; border-radius:999px; }
+.qcard{ background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:24px; margin-bottom:18px; animation: riseIn .45s ease both; }
+@keyframes riseIn{ from{ opacity:0; transform:translateY(14px);} to{opacity:1; transform:translateY(0);} }
+.qnum{ font-family:'IBM Plex Mono',monospace; color:var(--pen); font-size:13px; margin-bottom:6px; }
+.qtext{ font-size:17px; font-weight:600; margin:0 0 16px; line-height:1.5; }
+.options{ display:grid; gap:10px; }
+.opt{ display:flex; align-items:center; gap:12px; padding:11px 14px; border-radius:9px; border:1px solid var(--line); cursor:pointer; transition:border-color .2s, background .2s; }
+.opt:hover{ border-color:var(--rule-soft); }
+.opt.selected{ border-color:var(--rule); background:var(--rule-soft); }
+.bubble{ width:24px; height:24px; border-radius:50%; border:2px solid var(--ink-soft); flex:0 0 auto; position:relative; overflow:hidden; }
+.bubble::after{ content:""; position:absolute; inset:3px; border-radius:50%; background:radial-gradient(circle at 35% 30%, var(--pen), #8a2323 90%); transform:scale(0); transition:transform .28s cubic-bezier(.6,-0.4,.4,1.5); }
+.opt.selected .bubble{ border-color:var(--pen); }
+.opt.selected .bubble::after{ transform:scale(1); }
+.opt-text{ font-size:15px; }
+.opt.correct{ border-color:var(--green); }
+.opt.correct .bubble::after{ background:radial-gradient(circle at 35% 30%, var(--green), #2c6b41 90%); transform:scale(1); }
+.opt.wrong .bubble::after{ transform:scale(1); }
+.opt.wrong{ border-color:var(--pen); }
+.explain{ font-size:13.5px; color:var(--ink-soft); margin-top:12px; padding-top:12px; border-top:1px dashed var(--line); display:none; }
+.explain.show{ display:block; }
+.submit-bar{ position:sticky; bottom:16px; display:flex; justify-content:center; margin-top:10px; }
+.submit-inner{ background:var(--paper-raised); border:1px solid var(--line); box-shadow:var(--shadow); border-radius:999px; padding:10px 10px 10px 20px; display:flex; align-items:center; gap:14px; }
+.submit-inner span{ font-size:13.5px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; }
+.submit-inner .btn{ margin:0; padding:10px 20px; border-radius:999px; }
+
+/* ============ RESULTS ============ */
+.results-panel{ display:none; padding:40px 0 80px; text-align:center; }
+.results-panel.show{ display:block; }
+.score-badge{ width:150px; height:150px; margin:0 auto 20px; border-radius:50%; background:conic-gradient(var(--rule) calc(var(--pct,0) * 1%), var(--rule-soft) 0); display:flex; align-items:center; justify-content:center; animation: pop .5s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes pop{ from{ transform:scale(.6) rotateY(30deg); opacity:0;} to{ transform:scale(1) rotateY(0); opacity:1;} }
+.score-badge .inner{ width:118px; height:118px; border-radius:50%; background:var(--paper-raised); display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.score-badge .inner b{ font-family:'Fraunces',serif; font-size:32px; }
+.score-badge .inner span{ font-size:11px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; }
+
+/* ============ HISTORY ============ */
+.history-panel{ display:none; padding:40px 0 80px; }
+.history-panel.show{ display:block; }
+.history-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
+.history-head h2{ margin:0; font-size:26px; }
+.history-empty{ text-align:center; padding:60px 20px; color:var(--ink-soft); }
+.history-list{ display:grid; gap:12px; }
+.history-card{
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  background:var(--paper-raised); border:1px solid var(--line); border-radius:12px; padding:16px 18px;
+  box-shadow:var(--shadow); cursor:pointer; transition:transform .15s;
+}
+.history-card:hover{ transform:translateY(-2px); }
+.history-card .htitle{ font-weight:700; font-size:15.5px; margin-bottom:3px; }
+.history-card .hmeta{ font-size:12.5px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; }
+.history-score{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:15px; padding:6px 12px; border-radius:999px; background:var(--rule-soft); color:var(--rule); flex:0 0 auto; }
+[data-theme="dark"] .history-score{ color:var(--ink); }
+
+footer{ text-align:center; padding:30px 0 50px; color:var(--ink-soft); font-size:12.5px; font-family:'IBM Plex Mono',monospace; }
+
+@media (max-width:640px){
+  .nav-links{ display:none; }
+  .scanner{ padding:20px; }
+  .quiz-head, .history-head{ flex-direction:column; align-items:flex-start; }
+}
+</style>
+</head>
+<body data-theme="light">
+
+<nav class="navbar">
+  <div class="brand" id="brandHome"><span class="brand-mark">SQ</span> ScanQuiz</div>
+  <div class="nav-right">
+    <div class="nav-links">
+      <a id="navHome" class="active">Home</a>
+      <a id="navHistory">History</a>
+    </div>
+    <span id="authArea"></span>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode"><span class="knob"></span></button>
+  </div>
+</nav>
+
+<main>
+  <div class="wrap">
+
+    <!-- HOME / SCAN VIEW -->
+    <div class="view show" id="view-home">
+      <section class="hero">
+        <div class="eyebrow">Page in, practice set out</div>
+        <h1>Turn any textbook page <em>into</em> a practice test</h1>
+        <p>Snap a photo of a page, tell it how many questions you want, and get a ready-to-take multiple choice quiz — graded on the spot, saved to your history.</p>
+      </section>
+
+      <!-- shown when logged out -->
+      <div class="auth-gate" id="authGate" style="display:none;">
+        <h3 style="margin:0 0 6px;">Log in to start generating quizzes</h3>
+        <p>Your practice sets and scores are saved to your account so you can revisit them anytime.</p>
+        <button class="btn btn-primary" id="gateLoginBtn" style="max-width:220px;margin:0 auto;">Log in / Sign up</button>
+      </div>
+
+      <!-- shown when logged in -->
+      <section class="scanner" id="scannerSection" style="display:none;">
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" accept="image/*" capture="environment">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><rect x="3" y="14" width="18" height="7" rx="2"/></svg>
+          <div><strong>Drop a photo of the page</strong> or tap to choose</div>
+          <div class="hint">JPG or PNG — a clear, well-lit photo works best</div>
+        </div>
+        <div class="preview-wrap" id="previewWrap">
+          <div class="scan-beam" id="scanBeam"></div>
+          <img class="preview-img" id="previewImg" alt="Uploaded textbook page">
+          <button class="remove-img" id="removeImg" aria-label="Remove image">✕</button>
+        </div>
+
+        <div class="config-row">
+          <div class="field">
+            <label for="qCount">Number of questions</label>
+            <input type="number" id="qCount" min="1" max="50" value="10">
+          </div>
+          <div class="field">
+            <label for="difficulty">Difficulty</label>
+            <select id="difficulty">
+              <option value="mixed">Mixed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="generateBtn" disabled>Upload a page to generate questions</button>
+        <div class="error-box" id="errorBox"></div>
+      </section>
+
+      <section class="loading-panel" id="loadingPanel">
+        <svg class="pencil" viewBox="0 0 24 24" fill="none"><path d="M3 21l3.6-.9L20 6.7a1.5 1.5 0 000-2.1l-1.6-1.6a1.5 1.5 0 00-2.1 0L2.9 16.4 2 21z" stroke="currentColor" stroke-width="1.4" style="color:var(--rule)"/></svg>
+        <p id="loadingText">Reading the page…</p>
+      </section>
+
+      <section class="quiz-panel" id="quizPanel">
+        <div class="quiz-head">
+          <h2 id="quizTitle">Your practice set</h2>
+          <div class="progress-pill" id="progressPill">0 of 0 answered</div>
+        </div>
+        <div id="questionsList"></div>
+        <div class="submit-bar" id="submitBar">
+          <div class="submit-inner">
+            <span id="submitHint">Answer every question to submit</span>
+            <button class="btn btn-primary" id="submitBtn" style="width:auto;margin:0;" disabled>Submit answers</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="results-panel" id="resultsPanel">
+        <div class="score-badge" id="scoreBadge" style="--pct:0"><div class="inner"><b id="scoreText">0/0</b><span>SCORE</span></div></div>
+        <h2 id="resultHeadline">Nice work</h2>
+        <p id="resultSub" style="color:var(--ink-soft)"></p>
+        <button class="btn btn-ghost" id="reviewBtn" style="margin-top:14px;">Review answers</button>
+        <button class="btn btn-primary" id="newSetBtn" style="max-width:260px;margin:14px auto 0;">Scan another page</button>
+      </section>
+    </div>
+
+    <!-- HISTORY VIEW -->
+    <div class="view" id="view-history">
+      <section class="history-panel show">
+        <div class="history-head">
+          <h2>Your past practice sets</h2>
+        </div>
+        <div id="historyContent"></div>
+      </section>
+    </div>
+
+  </div>
+</main>
+
+<footer>Built with ScanQuiz · Your API key lives only in the server's .env file</footer>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal">
+    <button class="modal-close" id="closeModal">✕</button>
+    <div class="modal-tabs">
+      <div class="modal-tab active" data-tab="login">Log in</div>
+      <div class="modal-tab" data-tab="register">Sign up</div>
+    </div>
+
+    <form id="loginForm">
+      <h2>Welcome back</h2>
+      <div class="sub">Log in to see your history and generate quizzes.</div>
+      <div class="field"><label>Email</label><input type="email" id="loginEmail" required></div>
+      <div class="field"><label>Password</label><input type="password" id="loginPassword" required></div>
+      <div class="error-box" id="loginError"></div>
+      <button class="btn btn-primary" type="submit">Log in</button>
+    </form>
+
+    <form id="registerForm" style="display:none;">
+      <h2>Create your account</h2>
+      <div class="sub">Takes 10 seconds — no email verification needed.</div>
+      <div class="field"><label>Name</label><input type="text" id="regName" required></div>
+      <div class="field"><label>Email</label><input type="email" id="regEmail" required></div>
+      <div class="field"><label>Password</label><input type="password" id="regPassword" minlength="6" required></div>
+      <div class="error-box" id="regError"></div>
+      <button class="btn btn-primary" type="submit">Sign up</button>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const state = { imageBase64:null, mimeType:null, questions:[], answers:{}, difficulty:'mixed', title:'Practice set', submitted:false, token:null, user:null, reviewOnly:false };
+
+  /* ---------- THEME ---------- */
+  const themeToggle = $('themeToggle');
+  function setTheme(t){ document.body.setAttribute('data-theme', t); }
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  setTheme(prefersDark ? 'dark' : 'light');
+  themeToggle.addEventListener('click', () => {
+    setTheme(document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ---------- NAV / VIEWS ---------- */
+  function showView(name){
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('show'));
+    $('view-' + name).classList.add('show');
+    $('navHome').classList.toggle('active', name === 'home');
+    $('navHistory').classList.toggle('active', name === 'history');
+    window.scrollTo({top:0, behavior:'smooth'});
+    if(name === 'history') loadHistory();
+  }
+  $('navHome').addEventListener('click', () => showView('home'));
+  $('brandHome').addEventListener('click', () => showView('home'));
+  $('navHistory').addEventListener('click', () => { if(requireLogin()) showView('history'); });
+
+  /* ---------- AUTH ---------- */
+  const authModal = $('authModal');
+  function openModal(tab){
+    authModal.classList.add('show');
+    switchTab(tab || 'login');
+  }
+  function closeModal(){ authModal.classList.remove('show'); }
+  $('closeModal').addEventListener('click', closeModal);
+  authModal.addEventListener('click', e => { if(e.target === authModal) closeModal(); });
+  $('gateLoginBtn').addEventListener('click', () => openModal('login'));
+
+  document.querySelectorAll('.modal-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+  function switchTab(tab){
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    $('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+    $('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+  }
+
+  function requireLogin(){
+    if(!state.token){ openModal('login'); return false; }
+    return true;
+  }
+
+  function renderAuthArea(){
+    const authArea = $('authArea');
+    if(state.user){
+      authArea.innerHTML = '';
+      const chip = document.createElement('div');
+      chip.className = 'user-chip';
+      chip.innerHTML = `<span class="user-avatar">${escapeHtml(state.user.name.slice(0,1).toUpperCase())}</span>${escapeHtml(state.user.name.split(' ')[0])}`;
+      const logout = document.createElement('button');
+      logout.className = 'link-btn'; logout.textContent = 'Log out'; logout.style.marginLeft='8px';
+      logout.addEventListener('click', doLogout);
+      authArea.appendChild(chip);
+      authArea.appendChild(logout);
+      $('authGate').style.display = 'none';
+      $('scannerSection').style.display = '';
+    } else {
+      authArea.innerHTML = '';
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-ghost'; btn.style.padding='9px 16px'; btn.style.fontSize='13.5px';
+      btn.textContent = 'Log in';
+      btn.addEventListener('click', () => openModal('login'));
+      authArea.appendChild(btn);
+      $('authGate').style.display = '';
+      $('scannerSection').style.display = 'none';
+    }
+  }
+
+  async function api(path, options){
+    options = options || {};
+    options.headers = Object.assign({ 'Content-Type':'application/json' }, options.headers || {});
+    if(state.token) options.headers['Authorization'] = 'Bearer ' + state.token;
+    const res = await fetch('/api' + path, options);
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+    return data;
+  }
+
+  $('loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    $('loginError').classList.remove('show');
+    try{
+      const data = await api('/auth/login', { method:'POST', body: JSON.stringify({
+        email: $('loginEmail').value, password: $('loginPassword').value
+      })});
+      onAuthSuccess(data);
+    }catch(err){ $('loginError').textContent = err.message; $('loginError').classList.add('show'); }
+  });
+
+  $('registerForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    $('regError').classList.remove('show');
+    try{
+      const data = await api('/auth/register', { method:'POST', body: JSON.stringify({
+        name: $('regName').value, email: $('regEmail').value, password: $('regPassword').value
+      })});
+      onAuthSuccess(data);
+    }catch(err){ $('regError').textContent = err.message; $('regError').classList.add('show'); }
+  });
+
+  function onAuthSuccess(data){
+    state.token = data.token;
+    state.user = data.user;
+    localStorage.setItem('scanquiz_token', data.token);
+    closeModal();
+    renderAuthArea();
+    showView('home');
+  }
+
+  function doLogout(){
+    state.token = null; state.user = null;
+    localStorage.removeItem('scanquiz_token');
+    renderAuthArea();
+    showView('home');
+  }
+
+  async function restoreSession(){
+    const saved = localStorage.getItem('scanquiz_token');
+    if(!saved) return renderAuthArea();
+    state.token = saved;
+    try{
+      const data = await api('/auth/me');
+      state.user = data.user;
+    }catch(err){
+      state.token = null;
+      localStorage.removeItem('scanquiz_token');
+    }
+    renderAuthArea();
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  /* ---------- UPLOAD ---------- */
+  const dropzone = $('dropzone'), fileInput = $('fileInput'), previewWrap = $('previewWrap'),
+        previewImg = $('previewImg'), removeImg = $('removeImg'), generateBtn = $('generateBtn'), scanBeam = $('scanBeam');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  ['dragover','dragenter'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
+  fileInput.addEventListener('change', e => { const f = e.target.files[0]; if(f) handleFile(f); });
+
+  function handleFile(file){
+    if(!file.type.startsWith('image/')) return showError('Please upload an image file.');
+    hideError();
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      state.mimeType = file.type;
+      state.imageBase64 = dataUrl.split(',')[1];
+      previewImg.src = dataUrl;
+      previewWrap.classList.add('show');
+      dropzone.style.display = 'none';
+      generateBtn.disabled = false;
+      generateBtn.textContent = 'Generate practice questions';
+    };
+    reader.readAsDataURL(file);
+  }
+  removeImg.addEventListener('click', () => {
+    state.imageBase64 = null;
+    previewWrap.classList.remove('show');
+    dropzone.style.display = '';
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Upload a page to generate questions';
+    fileInput.value = '';
+  });
+
+  function showError(msg){ const b = $('errorBox'); b.textContent = msg; b.classList.add('show'); }
+  function hideError(){ $('errorBox').classList.remove('show'); }
+
+  /* ---------- GENERATE (via backend, key hidden server-side) ---------- */
+  generateBtn.addEventListener('click', async () => {
+    hideError();
+    if(!requireLogin()) return;
+    if(!state.imageBase64) return showError('Upload a page image first.');
+
+    const count = Math.max(1, Math.min(50, parseInt($('qCount').value || '10', 10)));
+    const difficulty = $('difficulty').value;
+
+    $('scannerSection').style.display = 'none';
+    scanBeam.classList.add('active');
+    $('loadingPanel').classList.add('show');
+    $('loadingText').textContent = 'Reading the page…';
+
+    try{
+      $('loadingText').textContent = 'Writing ' + count + ' questions…';
+      const data = await api('/quiz/generate', { method:'POST', body: JSON.stringify({
+        imageBase64: state.imageBase64, mimeType: state.mimeType, count, difficulty
+      })});
+      state.questions = data.questions;
+      state.title = data.title || 'Practice set';
+      state.difficulty = data.difficulty || difficulty;
+      state.answers = {};
+      state.submitted = false;
+      state.reviewOnly = false;
+      renderQuiz();
+      $('loadingPanel').classList.remove('show');
+      $('quizPanel').classList.add('show');
+    }catch(err){
+      $('loadingPanel').classList.remove('show');
+      $('scannerSection').style.display = '';
+      showError(err.message);
+    }
+  });
+
+  /* ---------- RENDER QUIZ ---------- */
+  const questionsList = $('questionsList'), progressPill = $('progressPill'), submitBtn = $('submitBtn');
+
+  function renderQuiz(){
+    $('quizTitle').textContent = state.title;
+    $('submitBar').style.display = state.reviewOnly ? 'none' : '';
+    questionsList.innerHTML = '';
+    state.questions.forEach((q, qi) => {
+      const card = document.createElement('div');
+      card.className = 'qcard';
+      card.style.animationDelay = (qi * 0.04) + 's';
+      const opts = q.options.map((opt, oi) => `
+        <div class="opt" data-qi="${qi}" data-oi="${oi}">
+          <div class="bubble"></div>
+          <div class="opt-text">${escapeHtml(opt)}</div>
+        </div>`).join('');
+      card.innerHTML = `
+        <div class="qnum">QUESTION ${qi+1} OF ${state.questions.length}</div>
+        <p class="qtext">${escapeHtml(q.question)}</p>
+        <div class="options">${opts}</div>
+        <div class="explain" id="explain-${qi}"></div>
+      `;
+      questionsList.appendChild(card);
+    });
+
+    questionsList.querySelectorAll('.opt').forEach(el => {
+      el.addEventListener('click', () => {
+        if(state.submitted || state.reviewOnly) return;
+        const qi = el.dataset.qi;
+        questionsList.querySelectorAll(`.opt[data-qi="${qi}"]`).forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+        state.answers[qi] = parseInt(el.dataset.oi, 10);
+        updateProgress();
+      });
+    });
+
+    if(state.reviewOnly){
+      state.questions.forEach((q, qi) => {
+        const chosen = state.answers[qi];
+        const opts = questionsList.querySelectorAll(`.opt[data-qi="${qi}"]`);
+        opts.forEach((o, oi) => {
+          o.style.pointerEvents = 'none';
+          if(oi === q.correctIndex) o.classList.add('correct');
+          else if(oi === chosen) o.classList.add('wrong');
+        });
+        if(q.explanation){ const ex = $('explain-'+qi); ex.textContent = q.explanation; ex.classList.add('show'); }
+      });
+    }
+    updateProgress();
+  }
+
+  function updateProgress(){
+    const answered = Object.keys(state.answers).length;
+    const total = state.questions.length;
+    progressPill.textContent = `${answered} of ${total} answered`;
+    submitBtn.disabled = answered < total;
+    $('submitHint').textContent = answered < total ? 'Answer every question to submit' : 'Ready to submit';
+  }
+
+  submitBtn.addEventListener('click', async () => {
+    state.submitted = true;
+    let correct = 0;
+    const answersArr = [];
+    state.questions.forEach((q, qi) => {
+      const chosen = state.answers[qi];
+      answersArr.push(chosen);
+      const opts = questionsList.querySelectorAll(`.opt[data-qi="${qi}"]`);
+      opts.forEach((o, oi) => {
+        o.style.pointerEvents = 'none';
+        if(oi === q.correctIndex) o.classList.add('correct');
+        else if(oi === chosen) o.classList.add('wrong');
+      });
+      if(chosen === q.correctIndex) correct++;
+      const ex = $('explain-'+qi);
+      if(q.explanation){ ex.textContent = q.explanation; ex.classList.add('show'); }
+    });
+    showResults(correct, state.questions.length);
+
+    try{
+      await api('/quiz/submit', { method:'POST', body: JSON.stringify({
+        title: state.title, difficulty: state.difficulty, questions: state.questions, answers: answersArr
+      })});
+    }catch(err){ /* saving to history failed silently — quiz result is still shown */ }
+  });
+
+  function showResults(correct, total){
+    $('quizPanel').classList.remove('show');
+    const pct = total ? Math.round((correct/total)*100) : 0;
+    $('scoreBadge').style.setProperty('--pct', pct);
+    $('scoreText').textContent = `${correct}/${total}`;
+    $('resultHeadline').textContent = pct >= 80 ? "You've got this" : pct >= 50 ? "Solid start" : "Worth another pass";
+    $('resultSub').textContent = `You scored ${pct}% on this page.`;
+    $('resultsPanel').classList.add('show');
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  $('reviewBtn').addEventListener('click', () => {
+    $('resultsPanel').classList.remove('show');
+    $('quizPanel').classList.add('show');
+  });
+
+  $('newSetBtn').addEventListener('click', () => {
+    $('resultsPanel').classList.remove('show');
+    $('scannerSection').style.display = '';
+    scanBeam.classList.remove('active');
+    removeImg.click();
+    state.questions = []; state.answers = {}; state.submitted = false; state.reviewOnly = false;
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+
+  /* ---------- HISTORY ---------- */
+  async function loadHistory(){
+    const el = $('historyContent');
+    el.innerHTML = '<p style="color:var(--ink-soft);font-family:\'IBM Plex Mono\',monospace;font-size:13px;">Loading…</p>';
+    try{
+      const data = await api('/quiz/history');
+      if(!data.attempts.length){
+        el.innerHTML = '<div class="history-empty">No practice sets yet — scan a page from Home to get started.</div>';
+        return;
+      }
+      el.innerHTML = '<div class="history-list"></div>';
+      const list = el.querySelector('.history-list');
+      data.attempts.forEach(a => {
+        const pct = a.total ? Math.round((a.score/a.total)*100) : 0;
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        const date = new Date(a.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+        card.innerHTML = `
+          <div>
+            <div class="htitle">${escapeHtml(a.title)}</div>
+            <div class="hmeta">${date} · ${escapeHtml(a.difficulty)}</div>
+          </div>
+          <div class="history-score">${pct}%</div>
+        `;
+        card.addEventListener('click', () => openHistoryAttempt(a._id));
+        list.appendChild(card);
+      });
+    }catch(err){
+      el.innerHTML = `<div class="error-box show">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  async function openHistoryAttempt(id){
+    try{
+      const data = await api('/quiz/history/' + id);
+      const a = data.attempt;
+      state.questions = a.questions;
+      state.answers = {}; a.answers.forEach((ans, i) => state.answers[i] = ans);
+      state.title = a.title;
+      state.difficulty = a.difficulty;
+      state.reviewOnly = true;
+      state.submitted = true;
+      renderQuiz();
+      showView('home');
+      $('scannerSection').style.display = 'none';
+      $('quizPanel').classList.add('show');
+    }catch(err){ alert(err.message); }
+  }
+
+  /* ---------- INIT ---------- */
+  restoreSession();
+})();
+</script>
+</body>
+</html>
