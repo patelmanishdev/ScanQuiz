@@ -9,7 +9,16 @@ const quizRoutes = require('./routes/quiz');
 
 const app = express();
 
-connectDB();
+// On Vercel, connectDB() runs on each invocation but reuses a cached
+// connection (see config/db.js) so this stays fast after the first request.
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Database connection failed. Check server logs.' });
+  }
+});
 
 app.use(cors());
 // Higher limit because a base64-encoded textbook photo can be a few MB.
@@ -24,5 +33,12 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`ScanQuiz server running on http://localhost:${PORT}`));
+// Vercel imports this file as a serverless function and calls the exported
+// app directly — it never runs app.listen(). Locally (npm start / npm run dev)
+// we still need app.listen() to actually start a server.
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`ScanQuiz server running on http://localhost:${PORT}`));
+}
+
+module.exports = app;
